@@ -1,0 +1,7 @@
+{
+  "realm": "django-realm",
+  "enabled": true,
+  "sslRequired": "none",
+  "registrationAllowed": false,
+  "defaultSignatureAlgorithm": "RS256"
+}

@@ -1,0 +1,15 @@
+<!DOCTYPE html>
+<html lang="es">
+<head><meta charset="UTF-8"><title>Selecciona aplicación</title></head>
+<body>
+  <h2>Bienvenido, {{ request.user.username }}</h2>
+  <p>¿A qué aplicación quieres acceder?</p>
+  <ul>
+    {% for role, url in apps.items %}
+      <li><a href="{{ url }}">{{ role }}</a></li>
+    {% endfor %}
+  </ul>
+  <hr>
+  <a href="/oidc/logout/">Cerrar sesión</a>
+</body>
+</html>

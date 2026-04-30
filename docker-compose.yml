@@ -1,0 +1,113 @@
+services:
+
+  mysql:
+    image: mysql:8.0
+    container_name: sso-mysql
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
+      MYSQL_USER: ${MYSQL_USER}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD}
+    volumes:
+      - mysql-data:/var/lib/mysql
+      - ./mysql/init.sql:/docker-entrypoint-initdb.d/init.sql
+    ports:
+      - "3306:3306"
+    networks:
+      - sso-network
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-p${MYSQL_ROOT_PASSWORD}"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  keycloak:
+    image: quay.io/keycloak/keycloak:24.0
+    container_name: sso-keycloak
+    command: start-dev --import-realm
+    environment:
+      KC_DB: mysql
+      KC_DB_URL: jdbc:mysql://mysql:3306/keycloak_db
+      KC_DB_USERNAME: ${MYSQL_USER}
+      KC_DB_PASSWORD: ${MYSQL_PASSWORD}
+      KEYCLOAK_ADMIN: ${KC_ADMIN_USER}
+      KEYCLOAK_ADMIN_PASSWORD: ${KC_ADMIN_PASSWORD}
+      KC_HTTP_PORT: 8080
+    volumes:
+      - ./keycloak/realm-export.json:/opt/keycloak/data/import/realm-export.json
+      # - ./keycloak/spi:/opt/keycloak/providers
+      - ./keycloak/spi/d1-user-storage-spi.jar:/opt/keycloak/providers/d1-user-storage-spi.jar
+    ports:
+      - "8080:8080"
+    depends_on:
+      mysql:
+        condition: service_healthy
+    networks:
+      - sso-network
+
+  d1:
+    build: ./d1
+    container_name: sso-d1
+    environment:
+      DB_NAME: d1_db
+      DB_USER: ${MYSQL_USER}
+      DB_PASSWORD: ${MYSQL_PASSWORD}
+      DB_HOST: mysql
+      DB_PORT: 3306
+      INTERNAL_API_KEY: ${INTERNAL_API_KEY}
+      OIDC_RP_CLIENT_ID: d1-client
+      OIDC_RP_CLIENT_SECRET: ${D1_CLIENT_SECRET}
+      KEYCLOAK_URL: http://keycloak:8080
+    ports:
+      - "8001:8001"
+    depends_on:
+      mysql:
+        condition: service_healthy
+    networks:
+      - sso-network
+
+  d2:
+    build: ./d2
+    container_name: sso-d2
+    environment:
+      DB_NAME: d2_db
+      DB_USER: ${MYSQL_USER}
+      DB_PASSWORD: ${MYSQL_PASSWORD}
+      DB_HOST: mysql
+      DB_PORT: 3306
+      OIDC_RP_CLIENT_ID: d2-client
+      OIDC_RP_CLIENT_SECRET: ${D2_CLIENT_SECRET}
+      KEYCLOAK_URL: http://keycloak:8080
+    ports:
+      - "8002:8002"
+    depends_on:
+      mysql:
+        condition: service_healthy
+    networks:
+      - sso-network
+
+  d3:
+    build: ./d3
+    container_name: sso-d3
+    environment:
+      DB_NAME: d3_db
+      DB_USER: ${MYSQL_USER}
+      DB_PASSWORD: ${MYSQL_PASSWORD}
+      DB_HOST: mysql
+      DB_PORT: 3306
+      OIDC_RP_CLIENT_ID: d3-client
+      OIDC_RP_CLIENT_SECRET: ${D3_CLIENT_SECRET}
+      KEYCLOAK_URL: http://keycloak:8080
+    ports:
+      - "8003:8003"
+    depends_on:
+      mysql:
+        condition: service_healthy
+    networks:
+      - sso-network
+
+volumes:
+  mysql-data:
+
+networks:
+  sso-network:
+    driver: bridge

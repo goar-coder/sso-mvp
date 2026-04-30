@@ -1,0 +1,51 @@
+cd keycloak-spi
+mvn clean package -DskipTests
+
+cd ..
+# Copiar el JAR al directorio que monta Keycloak
+cp keycloak-spi/target/d1-user-storage-spi-1.0.0.jar keycloak/spi/d1-user-storage-spi.jar
+
+
+Por qué fallaban las soluciones anteriores
+
+Se intentó usar varias APIs que ya no existen en Keycloak 24:
+
+UserCredentialManager ya no existe en esta versión.
+session.userCredentialManager() tampoco existe.
+session.users().credentialManager(user) tampoco existe.
+
+Esto ocurre porque Keycloak ha refactorizado completamente el sistema de credenciales en versiones recientes, eliminando esas utilidades.
+
+Contexto importante de tu caso
+
+Tu implementación es un User Storage SPI externo. Esto significa:
+
+Los usuarios no se almacenan en Keycloak.
+Las credenciales no las gestiona Keycloak.
+La validación de login se delega a tu sistema externo (D1).
+
+Por este motivo, Keycloak no espera que implementes lógica real de credenciales dentro de credentialManager().
+
+Solución correcta
+
+En este tipo de integración, la forma correcta de resolver el método es:
+
+Implementar credentialManager() lanzando UnsupportedOperationException.
+
+Esto es correcto porque Keycloak no usará ese método para gestionar credenciales en usuarios externos.
+
+Dónde se maneja realmente la autenticación
+
+La validación de usuario y contraseña no se hace en el adapter.
+
+Se realiza en el UserStorageProvider mediante la interfaz CredentialInputValidator.
+
+Ahí es donde debes implementar la lógica que valida credenciales contra tu sistema externo.
+
+Resumen
+
+El error ocurrió porque Keycloak 24 hizo obligatorio credentialManager().
+Las soluciones antiguas ya no existen en esta versión.
+En User Storage SPI externo no se gestionan credenciales en el adapter.
+La autenticación real se implementa en el provider, no en el adapter.
+credentialManager() se deja sin uso funcional en este caso.
