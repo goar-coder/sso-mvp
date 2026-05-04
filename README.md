@@ -387,6 +387,149 @@ docker compose restart d1 d2 d3 keycloak
 8. Usuario → Accede a la aplicación elegida
 ```
 
+## 🔐 **NUEVO: Autenticación por Token**
+
+> **⚡ Funcionalidad añadida:** Sistema de autenticación alternativo mediante tokens, permitiendo acceso directo sin credenciales de usuario/contraseña.
+
+### 🎯 Descripción
+
+La autenticación por token permite que usuarios autorizados accedan al sistema utilizando un token personalizado en lugar del flujo tradicional de login. Esto es útil para:
+
+- **Integraciones automáticas**
+- **APIs de terceros**
+- **Acceso programático**
+- **Bypass del login tradicional**
+
+### 🏗️ Arquitectura Token
+
+```
+┌──────────────────────────────────────────────────────────────┐
+│                    FLUJO DE TOKEN                             │
+│                                                              │
+│  1. URL con token                                            │
+│     ↓                                                        │
+│  2. Keycloak detecta d1_token                               │
+│     ↓                                                        │
+│  3. D1TokenAuthenticator (SPI)                             │
+│     ↓                                                        │
+│  4. Validación en D1 API                                   │
+│     ↓                                                        │
+│  5. Usuario autenticado + redirecto                        │
+└──────────────────────────────────────────────────────────────┘
+```
+
+### ⚙️ Implementación
+
+#### 1. **Nuevo SPI: D1TokenAuthenticator**
+
+**Ubicación:** `keycloak-spi/src/main/java/com/empresa/spi/D1TokenAuthenticator.java`
+
+**Funcionalidad:**
+- Detecta parámetro `d1_token` en la URL
+- Valida token contra API de D1
+- Autentica al usuario automáticamente
+- Mantiene los mismos privilegios que autenticación tradicional
+
+#### 2. **Nuevo Endpoint en D1**
+
+**Ubicación:** `d1/internal_auth/views.py`
+
+**Endpoint:** `POST /api/internal/auth/verify-token/`
+
+**Formato del Token:** `token_[username]` (ej: `token_goar`)
+
+```python
+def verify_token(request):
+    # Valida formato: token_username
+    # Retorna mismo JSON que verify_user()
+    # Mantiene consistencia con autenticación tradicional
+```
+
+#### 3. **Authentication Flow Configurado**
+
+**Flow Name:** `browser-token-auth`
+
+**Configuración:**
+```
+├── Cookie (ALTERNATIVE)
+├── Kerberos (DISABLED)  
+├── Identity Provider Redirector (ALTERNATIVE)
+└── Forms (ALTERNATIVE)
+    ├── Username Password Form (ALTERNATIVE)
+    └── D1 Token Authenticator (ALTERNATIVE) ← NUEVO
+        └── OTP Form (CONDITIONAL)
+```
+
+### 🧪 Testing Token Authentication
+
+#### Método 1: URL Directa
+
+```bash
+# Test con curl
+curl -i -X GET "http://localhost:8080/realms/django-realm/protocol/openid-connect/auth?response_type=code&scope=openid+email&client_id=d1-client&redirect_uri=http%3A%2F%2Flocalhost%3A8001%2Foidc%2Fcallback%2F&d1_token=token_goar" --max-redirs 3
+
+# Resultado esperado: HTTP 302 → Success Login
+```
+
+#### Método 2: Navegador
+
+```
+http://localhost:8080/realms/django-realm/protocol/openid-connect/auth?response_type=code&scope=openid+email&client_id=d1-client&redirect_uri=http%3A%2F%2Flocalhost%3A8001%2Foidc%2Fcallback%2F&d1_token=token_goar
+```
+
+#### Método 3: Desde Aplicaciones Cliente
+
+```bash
+# Desde D2 con token
+http://localhost:8002/oidc/authenticate/?d1_token=token_goar
+
+# Desde D3 con token  
+http://localhost:8003/oidc/authenticate/?d1_token=token_goar
+```
+
+### 🔧 Configuración Manual
+
+Para replicar la configuración en otro entorno, consultar:
+
+**📄 [docs/configuracion-manual-keycloak.md](docs/configuracion-manual-keycloak.md)**
+
+Este archivo contiene:
+- ✅ Pasos detallados de configuración en Keycloak Admin Console
+- ✅ Creación de Authentication Flow
+- ✅ Configuración de D1TokenAuthenticator
+- ✅ Binding como Default Browser Flow
+- ✅ Troubleshooting y verificación
+
+### 🎯 Casos de Uso Token
+
+| **Escenario** | **URL** | **Resultado** |
+|---------------|---------|---------------|
+| Token válido | `...&d1_token=token_goar` | ✅ Login automático como 'goar' |
+| Token inválido | `...&d1_token=token_invalid` | ❌ Fallback a login tradicional |
+| Sin token | URL normal | 🔄 Login tradicional usuario/password |
+| Token mal formato | `...&d1_token=invalid_format` | ❌ Fallback a login tradicional |
+
+### 🆕 Características Token
+
+- **🔄 Coexistencia:** Token y password funcionan simultáneamente
+- **🛡️ Seguridad:** Validación en backend D1 con API key
+- **🚀 Performance:** Bypass completo del formulario de login
+- **📊 Logging:** Logs detallados en Keycloak para debug
+- **⚡ Automático:** Detección transparente del parámetro
+
+### 🏁 Flujo Completo Token
+
+```
+1. Usuario accede con ?d1_token=token_username
+2. Keycloak → D1TokenAuthenticator detecta token
+3. SPI → POST a D1 API /verify-token/
+4. D1 → Valida formato + usuario existe
+5. D1 → Retorna user data + roles
+6. Keycloak → Autentica usuario automáticamente  
+7. Portal D1 → Analiza roles (igual que login tradicional)
+8. Usuario → Accede según sus permisos
+```
+
 ---
 
-**🚀 ¡Sistema SSO completamente funcional con portal inteligente!**
+**🚀 ¡Sistema SSO completamente funcional con portal inteligente + autenticación por token!**

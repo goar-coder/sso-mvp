@@ -57,6 +57,23 @@ public class D1ApiClient {
         return executeAndParse(request);
     }
 
+    public D1UserData verifyToken(String token) {
+        String body = String.format(
+            "{\"token\":\"%s\"}",
+            token.replace("\"", "")
+        );
+
+        HttpRequest request = HttpRequest.newBuilder()
+                .uri(URI.create(baseUrl + "/api/internal/auth/verify-token/"))
+                .header("Content-Type", "application/json")
+                .header("X-Internal-Api-Key", apiKey)
+                .POST(HttpRequest.BodyPublishers.ofString(body))
+                .timeout(Duration.ofSeconds(5))
+                .build();
+
+        return executeAndParse(request);
+    }
+
     private D1UserData executeAndParse(HttpRequest request) {
         try {
             HttpResponse<String> response = httpClient.send(

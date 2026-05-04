@@ -8,12 +8,14 @@ import org.keycloak.models.credential.PasswordCredentialModel;
 import org.keycloak.storage.StorageId;
 import org.keycloak.storage.UserStorageProvider;
 import org.keycloak.storage.user.UserLookupProvider;
+import org.keycloak.storage.user.UserRegistrationProvider;
 
 import java.util.stream.Stream;
 
 public class D1UserStorageProvider implements
         UserStorageProvider,
         UserLookupProvider,
+        UserRegistrationProvider,
         CredentialInputValidator {
 
     private final KeycloakSession session;
@@ -33,9 +35,31 @@ public class D1UserStorageProvider implements
 
     @Override
     public UserModel getUserByUsername(RealmModel realm, String username) {
+        System.out.println("D1UserStorageProvider.getUserByUsername: " + username);
         D1UserData data = apiClient.findByUsername(username);
-        if (data == null) return null;
+        if (data == null) {
+            System.out.println("D1UserStorageProvider.getUserByUsername: user not found in D1");
+            return null;
+        }
+        System.out.println("D1UserStorageProvider.getUserByUsername: found user, returning adapter");
         return new D1UserAdapter(session, realm, model, data);
+    }
+
+    private UserModel createUserFromD1Data(RealmModel realm, D1UserData data) {
+        UserModel user = session.users().addUser(realm, data.getUsername());
+        user.setEnabled(data.isActive());
+        user.setEmail(data.getEmail());
+        user.setFirstName(data.getFirstName());
+        user.setLastName(data.getLastName());
+        // No set password - let credential validator handle it
+        return user;
+    }
+
+    private void updateUserFromD1Data(UserModel user, D1UserData data) {
+        user.setEnabled(data.isActive());
+        user.setEmail(data.getEmail());
+        user.setFirstName(data.getFirstName());
+        user.setLastName(data.getLastName());
     }
 
     @Override
@@ -47,6 +71,20 @@ public class D1UserStorageProvider implements
     @Override
     public UserModel getUserByEmail(RealmModel realm, String email) {
         return null; // no implementado en MVP
+    }
+
+    // ── UserRegistrationProvider ──────────────────────────────────────
+    // No registramos nuevos usuarios desde Keycloak, solo los traemos de D1
+    @Override
+    public UserModel addUser(RealmModel realm, String username) {
+        // No permitir registro de nuevos usuarios desde Keycloak
+        // Solo importar desde D1
+        return null;
+    }
+
+    @Override
+    public boolean removeUser(RealmModel realm, UserModel user) {
+        return false;
     }
 
     // ── CredentialInputValidator ──────────────────────────────────────
@@ -65,8 +103,11 @@ public class D1UserStorageProvider implements
     public boolean isValid(RealmModel realm, UserModel user,
                            CredentialInput credentialInput) {
         String password = credentialInput.getChallengeResponse();
+        System.out.println("D1UserStorageProvider.isValid: user=" + user.getUsername() + ", password_provided=" + (password != null));
         D1UserData data = apiClient.verify(user.getUsername(), password);
-        return data != null;
+        boolean valid = data != null;
+        System.out.println("D1UserStorageProvider.isValid: result=" + valid);
+        return valid;
     }
 
     // ── UserStorageProvider ───────────────────────────────────────────

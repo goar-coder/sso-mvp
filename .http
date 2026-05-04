@@ -1,0 +1,8 @@
+POST http://localhost:8001/api/internal/auth/verify/
+X-Internal-Api-Key: internal-api-key-super-secret-mvp
+Content-Type: application/json
+
+{
+  "username": "user_d1_d3",
+  "password": "pass123"
+}

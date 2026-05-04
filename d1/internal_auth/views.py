@@ -75,3 +75,37 @@ def get_user(request):
         return JsonResponse({'found': False})
 
     return JsonResponse({'found': True, 'user': user_to_dict(user)})
+
+
+@csrf_exempt
+@require_http_methods(['POST'])
+def verify_token(request):
+    """
+    Keycloak llama aquí para verificar un token de autenticación.
+    POST /api/internal/auth/verify-token/
+    Body: { "token": "..." }
+    """
+    try:
+        body = json.loads(request.body)
+        token = body.get('token', '').strip()
+    except (json.JSONDecodeError, AttributeError):
+        return JsonResponse({'valid': False}, status=400)
+
+    if not token:
+        return JsonResponse({'valid': False})
+
+    # Aquí deberías implementar la lógica para validar el token
+    # Por ahora, como ejemplo, asumiremos que el token es el username con un prefijo
+    # En una implementación real, esto podría ser un JWT, UUID en BD, etc.
+    if token.startswith('token_'):
+        username = token.replace('token_', '')
+        try:
+            user = User.objects.get(username=username, is_active=True)
+            return JsonResponse({
+                'valid': True,
+                'user': user_to_dict(user),
+            })
+        except User.DoesNotExist:
+            pass
+
+    return JsonResponse({'valid': False})
