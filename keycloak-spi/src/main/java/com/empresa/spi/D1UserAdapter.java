@@ -25,14 +25,22 @@ public class D1UserAdapter extends AbstractUserAdapter {
 
     @Override
     public String getId() {
-        return StorageId.keycloakId(componentModel, data.getId());
+        String id = StorageId.keycloakId(componentModel, data.getId());
+        System.out.println("D1UserAdapter.getId(): " + id);
+        return id;
     }
 
-    @Override public String getUsername()  { return data.getUsername(); }
+    @Override public String getUsername()  { 
+        System.out.println("D1UserAdapter.getUsername(): " + data.getUsername());
+        return data.getUsername(); 
+    }
     @Override public String getEmail()     { return data.getEmail(); }
     @Override public String getFirstName() { return data.getFirstName(); }
     @Override public String getLastName()  { return data.getLastName(); }
-    @Override public boolean isEnabled()   { return data.isActive(); }
+    @Override public boolean isEnabled()   { 
+        System.out.println("D1UserAdapter.isEnabled(): " + data.isActive());
+        return data.isActive(); 
+    }
 
     @Override
     public Stream<RoleModel> getRealmRoleMappingsStream() {

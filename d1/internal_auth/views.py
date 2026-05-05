@@ -6,9 +6,15 @@ from django.http import JsonResponse
 from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_http_methods
 
+import logging
+logger = logging.getLogger(__name__)
+
+
+
 
 def get_app_roles(user):
     """Convierte los grupos de Django en roles de app."""
+    print("funcion get_app_roles....", flush=True)
     group_names = user.groups.values_list('name', flat=True)
     roles = []
     for group, role in settings.GROUP_TO_APP_ROLE.items():
@@ -37,6 +43,7 @@ def verify_user(request):
     POST /api/internal/auth/verify/
     Body: { "username": "...", "password": "..." }
     """
+    print("funcion verify_user....", flush=True)
     try:
         body = json.loads(request.body)
         username = body.get('username', '').strip()
@@ -61,16 +68,27 @@ def verify_user(request):
 @require_http_methods(['GET'])
 def get_user(request):
     """
-    Keycloak llama aquí para buscar un usuario por username.
+    Keycloak llama aquí para buscar un usuario por username o id.
     GET /api/internal/auth/user/?username=...
+    GET /api/internal/auth/user/?id=...
     """
+    print("funcion get_user....", flush=True)
+    print(f"DEBUG: request.GET = {dict(request.GET)}", flush=True)
+    print("AQUIIIII", flush=True)
+    print(f"DEBUG: request.GET = {dict(request.GET)}", flush=True)
     username = request.GET.get('username', '').strip()
+    user_id = request.GET.get('id', '').strip()
+    print(f"DEBUG: username='{username}', user_id='{user_id}'", flush=True)
 
-    if not username:
+    if not username and not user_id:
+        print(f"DEBUG: Neither username nor user_id provided, returning 400", flush=True)
         return JsonResponse({'found': False}, status=400)
 
     try:
-        user = User.objects.get(username=username)
+        if username:
+            user = User.objects.get(username=username)
+        else:
+            user = User.objects.get(pk=user_id)
     except User.DoesNotExist:
         return JsonResponse({'found': False})
 
@@ -85,6 +103,7 @@ def verify_token(request):
     POST /api/internal/auth/verify-token/
     Body: { "token": "..." }
     """
+    print("funcion verify_token....", flush=True)
     try:
         body = json.loads(request.body)
         token = body.get('token', '').strip()

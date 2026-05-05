@@ -29,6 +29,7 @@ public class D1UserStorageProvider implements
         this.model     = model;
         this.apiClient = apiClient;
         this.realm     = realm;
+        System.err.println("DEBUG-D1: !!! MÉTODO D1UserStorageProvider !!!");
     }
 
     // ── UserLookupProvider ────────────────────────────────────────────
@@ -41,7 +42,7 @@ public class D1UserStorageProvider implements
             System.out.println("D1UserStorageProvider.getUserByUsername: user not found in D1");
             return null;
         }
-        System.out.println("D1UserStorageProvider.getUserByUsername: found user, returning adapter");
+        System.out.println("D1UserStorageProvider.getUserByUsername: found user in D1, returning adapter");
         return new D1UserAdapter(session, realm, model, data);
     }
 
@@ -64,8 +65,29 @@ public class D1UserStorageProvider implements
 
     @Override
     public UserModel getUserById(RealmModel realm, String id) {
-        String username = StorageId.externalId(id);
-        return getUserByUsername(realm, username);
+        String externalId = StorageId.externalId(id);
+        System.out.println("D1UserStorageProvider.getUserById: " + externalId);
+        D1UserData data = apiClient.findById(externalId);
+        if (data == null) {
+            System.out.println("D1UserStorageProvider.getUserById: user not found in D1");
+            return null;
+        }
+        System.out.println("D1UserStorageProvider.getUserById: found user in D1, username: " + data.getUsername());
+        
+        // Try to find user in local Keycloak database first
+        UserModel localUser = session.users().getUserByUsername(realm, data.getUsername());
+        if (localUser == null) {
+            // User doesn't exist locally, create it
+            System.out.println("D1UserStorageProvider.getUserById: user not in local DB, creating...");
+            localUser = createUserFromD1Data(realm, data);
+            System.out.println("D1UserStorageProvider.getUserById: user created locally with ID: " + localUser.getId());
+        } else {
+            // User exists locally, update their info
+            System.out.println("D1UserStorageProvider.getUserById: user exists locally, updating...");
+            updateUserFromD1Data(localUser, data);
+        }
+        
+        return localUser;
     }
 
     @Override

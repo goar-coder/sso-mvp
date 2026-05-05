@@ -29,6 +29,7 @@ public class D1ApiClient {
     }
 
     public D1UserData verify(String username, String password) {
+        System.err.println("DEBUG-D1: verify invoked for username: " + username);
         String body = String.format(
             "{\"username\":\"%s\",\"password\":\"%s\"}",
             username.replace("\"", ""),
@@ -49,6 +50,17 @@ public class D1ApiClient {
     public D1UserData findByUsername(String username) {
         HttpRequest request = HttpRequest.newBuilder()
                 .uri(URI.create(baseUrl + "/api/internal/auth/user/?username=" + username))
+                .header("X-Internal-Api-Key", apiKey)
+                .GET()
+                .timeout(Duration.ofSeconds(5))
+                .build();
+
+        return executeAndParse(request);
+    }
+
+    public D1UserData findById(String id) {
+        HttpRequest request = HttpRequest.newBuilder()
+                .uri(URI.create(baseUrl + "/api/internal/auth/user/?id=" + id))
                 .header("X-Internal-Api-Key", apiKey)
                 .GET()
                 .timeout(Duration.ofSeconds(5))

@@ -59,6 +59,8 @@ services:
       KEYCLOAK_URL: http://keycloak:8080
     ports:
       - "8001:8001"
+    volumes:
+    - ./d1:/app
     depends_on:
       mysql:
         condition: service_healthy
@@ -79,6 +81,8 @@ services:
       KEYCLOAK_URL: http://keycloak:8080
     ports:
       - "8002:8002"
+    volumes:
+    - ./d2:/app
     depends_on:
       mysql:
         condition: service_healthy
@@ -99,6 +103,8 @@ services:
       KEYCLOAK_URL: http://keycloak:8080
     ports:
       - "8003:8003"
+    volumes:
+    - ./d3:/app
     depends_on:
       mysql:
         condition: service_healthy

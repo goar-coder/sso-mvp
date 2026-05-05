@@ -29,10 +29,13 @@ public class D1TokenAuthenticator implements Authenticator {
         }
 
         if (token == null || token.trim().isEmpty()) {
-            // No token provided, continue with the flow
-            System.err.println("DEBUG-D1: No se encontró token");
-            // context.attempted();
-            // return;
+            System.err.println("DEBUG-D1: No se encontró token.");
+            
+            // NOTA: Es obligatorio llamar a un método del context antes del return
+            context.attempted(); 
+            
+            System.err.println("DEBUG-D1: Se llamó a context.attempted(), pasando al siguiente paso...");
+            return; 
         }
 
         // System.out.println("D1TokenAuthenticator: Processing token: " + token);

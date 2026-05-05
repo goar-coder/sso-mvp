@@ -12,6 +12,7 @@ public class D1UserStorageProviderFactory
         implements UserStorageProviderFactory<D1UserStorageProvider> {
 
     public static final String PROVIDER_ID = "d1-user-storage";
+    
 
     @Override
     public String getId() {
@@ -20,6 +21,7 @@ public class D1UserStorageProviderFactory
 
     @Override
     public D1UserStorageProvider create(KeycloakSession session, ComponentModel model) {
+        System.err.println("DEBUG-D1: Factory creando D1UserStorageProvider");
         String d1Url = model.getConfig().getFirst("d1Url");
         String apiKey = model.getConfig().getFirst("apiKey");
 

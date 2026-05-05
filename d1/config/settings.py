@@ -116,5 +116,18 @@ def oidc_callback_with_roles(strategy, details, backend, user, *args, **kwargs):
 # Registrar el callback
 OIDC_RP_CALLBACK_FUNC = 'config.settings.oidc_callback_with_roles'
 
+LOGGING = {
+    'version': 1,
+    'handlers': {
+        'console': {
+            'class': 'logging.StreamHandler',
+        },
+    },
+    'root': {
+        'handlers': ['console'],
+        'level': 'INFO',
+    },
+}
+
 # ── API key interna (Keycloak SPI → D1) ───────────────────────────────
 INTERNAL_API_KEY = config('INTERNAL_API_KEY')
