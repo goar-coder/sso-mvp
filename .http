@@ -1,0 +1,18 @@
+GET http://localhost:8001/api/internal/auth/user/?id=2
+X-Internal-Api-Key: internal-api-key-super-secret-mvp
+
+###
+
+POST http://localhost:8001/api/internal/auth/verify/
+X-Internal-Api-Key: internal-api-key-super-secret-mvp
+Content-Type: application/json
+
+{
+  "username": "user_d1_only",
+  "password": "pass123"
+}
+
+###
+
+GET http://localhost:8001/api/internal/auth/user/?username=user_d1_only
+X-Internal-Api-Key: internal-api-key-super-secret-mvp
