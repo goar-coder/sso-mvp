@@ -33,6 +33,7 @@ public class D1UserStorageProvider implements
 
     @Override
     public UserModel getUserByUsername(RealmModel realm, String username) {
+        System.out.println("D1UserStorageProvider.getUserByUsername: " + username);
         D1UserData data = apiClient.findByUsername(username);
         if (data == null) return null;
         return new D1UserAdapter(session, realm, model, data);
