@@ -1,5 +1,11 @@
 FROM python:3.11-slim
 
+# Evita que Python genere los archivos .pyc
+ENV PYTHONDONTWRITEBYTECODE=1
+
+# Fuerza a que los logs salgan a la consola sin retraso
+ENV PYTHONUNBUFFERED=1
+
 RUN apt-get update && apt-get install -y \
     default-libmysqlclient-dev \
     gcc \
