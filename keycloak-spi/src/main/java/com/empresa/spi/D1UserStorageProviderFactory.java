@@ -21,9 +21,12 @@ public class D1UserStorageProviderFactory
 
     @Override
     public D1UserStorageProvider create(KeycloakSession session, ComponentModel model) {
-        System.err.println("DEBUG-D1: Factory creando D1UserStorageProvider");
+        System.err.println("DEBUG-D1: [USER_STORAGE_FACTORY] create() invocado");
         String d1Url = model.getConfig().getFirst("d1Url");
         String apiKey = model.getConfig().getFirst("apiKey");
+
+        System.err.println("DEBUG-D1: [USER_STORAGE_FACTORY] D1 URL: " + d1Url);
+        System.err.println("DEBUG-D1: [USER_STORAGE_FACTORY] API Key configurada: " + (apiKey != null && !apiKey.isEmpty()));
 
         RealmModel realm = session.getContext().getRealm();
         D1ApiClient client = new D1ApiClient(d1Url, apiKey);

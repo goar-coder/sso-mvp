@@ -29,7 +29,7 @@ public class D1ApiClient {
     }
 
     public D1UserData verify(String username, String password) {
-        System.err.println("DEBUG-D1: verify invoked for username: " + username);
+        System.err.println("DEBUG-D1: [D1_API_CLIENT] verify() invocado para usuario: " + username);
         String body = String.format(
             "{\"username\":\"%s\",\"password\":\"%s\"}",
             username.replace("\"", ""),
@@ -44,6 +44,7 @@ public class D1ApiClient {
                 .timeout(Duration.ofSeconds(5))
                 .build();
 
+        System.err.println("DEBUG-D1: [D1_API_CLIENT] Enviando solicitud a: " + baseUrl + "/api/internal/auth/verify/");
         return executeAndParse(request);
     }
 
@@ -88,27 +89,46 @@ public class D1ApiClient {
 
     private D1UserData executeAndParse(HttpRequest request) {
         try {
+            System.err.println("DEBUG-D1: [D1_API_CLIENT] Enviando solicitud HTTP...");
             HttpResponse<String> response = httpClient.send(
                 request, HttpResponse.BodyHandlers.ofString()
             );
+
+            System.err.println("DEBUG-D1: [D1_API_CLIENT] Respuesta HTTP - Status: " + response.statusCode());
+            System.err.println("DEBUG-D1: [D1_API_CLIENT] Respuesta Body: " + response.body());
 
             JsonNode root = mapper.readTree(response.body());
 
             // verify endpoint
             if (root.has("valid")) {
-                if (!root.get("valid").asBoolean()) return null;
+                boolean isValid = root.get("valid").asBoolean();
+                System.err.println("DEBUG-D1: [D1_API_CLIENT] Respuesta 'verify' - valid: " + isValid);
+                if (!isValid) {
+                    System.err.println("DEBUG-D1: [D1_API_CLIENT] Validación fallida (valid=false)");
+                    return null;
+                }
+                System.err.println("DEBUG-D1: [D1_API_CLIENT] Validación exitosa, parseando usuario");
                 return parseUser(root.get("user"));
             }
 
             // get-user endpoint
             if (root.has("found")) {
-                if (!root.get("found").asBoolean()) return null;
+                boolean isFound = root.get("found").asBoolean();
+                System.err.println("DEBUG-D1: [D1_API_CLIENT] Respuesta 'get-user' - found: " + isFound);
+                if (!isFound) {
+                    System.err.println("DEBUG-D1: [D1_API_CLIENT] Usuario no encontrado (found=false)");
+                    return null;
+                }
+                System.err.println("DEBUG-D1: [D1_API_CLIENT] Usuario encontrado, parseando");
                 return parseUser(root.get("user"));
             }
 
+            System.err.println("DEBUG-D1: [D1_API_CLIENT] Respuesta no tiene campos 'valid' ni 'found', retornando null");
             return null;
 
         } catch (IOException | InterruptedException e) {
+            System.err.println("DEBUG-D1: [D1_API_CLIENT] Excepción al enviar solicitud: " + e.getMessage());
+            e.printStackTrace();
             return null;
         }
     }

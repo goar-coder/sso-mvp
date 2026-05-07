@@ -29,20 +29,20 @@ public class D1UserStorageProvider implements
         this.model     = model;
         this.apiClient = apiClient;
         this.realm     = realm;
-        System.err.println("DEBUG-D1: !!! MÉTODO D1UserStorageProvider !!!");
+        System.err.println("DEBUG-D1: [USER_STORAGE_PROVIDER] Constructor invocado - instancia creada");
     }
 
     // ── UserLookupProvider ────────────────────────────────────────────
 
     @Override
     public UserModel getUserByUsername(RealmModel realm, String username) {
-        System.out.println("D1UserStorageProvider.getUserByUsername: " + username);
+        System.err.println("DEBUG-D1: [USER_LOOKUP] getUserByUsername(" + username + ") invocado");
         D1UserData data = apiClient.findByUsername(username);
         if (data == null) {
-            System.out.println("D1UserStorageProvider.getUserByUsername: user not found in D1");
+            System.err.println("DEBUG-D1: [USER_LOOKUP] Usuario NO encontrado en D1 para: " + username);
             return null;
         }
-        System.out.println("D1UserStorageProvider.getUserByUsername: found user in D1, returning adapter");
+        System.err.println("DEBUG-D1: [USER_LOOKUP] Usuario encontrado en D1: " + data.getUsername() + ", activo: " + data.isActive());
         return new D1UserAdapter(session, realm, model, data);
     }
 
@@ -66,24 +66,24 @@ public class D1UserStorageProvider implements
     @Override
     public UserModel getUserById(RealmModel realm, String id) {
         String externalId = StorageId.externalId(id);
-        System.out.println("D1UserStorageProvider.getUserById: " + externalId);
+        System.err.println("DEBUG-D1: [USER_LOOKUP] getUserById(" + id + ") -> externalId: " + externalId);
         D1UserData data = apiClient.findById(externalId);
         if (data == null) {
-            System.out.println("D1UserStorageProvider.getUserById: user not found in D1");
+            System.err.println("DEBUG-D1: [USER_LOOKUP] Usuario NO encontrado en D1 por ID: " + externalId);
             return null;
         }
-        System.out.println("D1UserStorageProvider.getUserById: found user in D1, username: " + data.getUsername());
+        System.err.println("DEBUG-D1: [USER_LOOKUP] Usuario encontrado en D1 por ID, username: " + data.getUsername());
         
         // Try to find user in local Keycloak database first
         UserModel localUser = session.users().getUserByUsername(realm, data.getUsername());
         if (localUser == null) {
             // User doesn't exist locally, create it
-            System.out.println("D1UserStorageProvider.getUserById: user not in local DB, creating...");
+            System.err.println("DEBUG-D1: [USER_LOOKUP] Usuario no existe en BD local, creando...");
             localUser = createUserFromD1Data(realm, data);
-            System.out.println("D1UserStorageProvider.getUserById: user created locally with ID: " + localUser.getId());
+            System.err.println("DEBUG-D1: [USER_LOOKUP] Usuario creado localmente con ID: " + localUser.getId());
         } else {
             // User exists locally, update their info
-            System.out.println("D1UserStorageProvider.getUserById: user exists locally, updating...");
+            System.err.println("DEBUG-D1: [USER_LOOKUP] Usuario existe en BD local, actualizando info...");
             updateUserFromD1Data(localUser, data);
         }
         
@@ -113,22 +113,35 @@ public class D1UserStorageProvider implements
 
     @Override
     public boolean supportsCredentialType(String credentialType) {
-        return PasswordCredentialModel.TYPE.equals(credentialType);
+        System.err.println("DEBUG-D1: [CREDENTIAL_VALIDATOR] supportsCredentialType(" + credentialType + ") invocado");
+        boolean supports = PasswordCredentialModel.TYPE.equals(credentialType);
+        System.err.println("DEBUG-D1: [CREDENTIAL_VALIDATOR] supportsCredentialType resultado: " + supports);
+        return supports;
     }
 
     @Override
     public boolean isConfiguredFor(RealmModel realm, UserModel user, String credentialType) {
-        return supportsCredentialType(credentialType);
+        System.err.println("DEBUG-D1: [CREDENTIAL_VALIDATOR] isConfiguredFor(user=" + user.getUsername() + ", credentialType=" + credentialType + ") invocado");
+        boolean result = supportsCredentialType(credentialType);
+        System.err.println("DEBUG-D1: [CREDENTIAL_VALIDATOR] isConfiguredFor resultado: " + result);
+        return result;
     }
 
     @Override
     public boolean isValid(RealmModel realm, UserModel user,
                            CredentialInput credentialInput) {
+        System.err.println("DEBUG-D1: [CREDENTIAL_VALIDATOR] isValid() INVOCADO para usuario: " + user.getUsername());
         String password = credentialInput.getChallengeResponse();
-        System.out.println("D1UserStorageProvider.isValid: user=" + user.getUsername() + ", password_provided=" + (password != null));
+        System.err.println("DEBUG-D1: [CREDENTIAL_VALIDATOR] Password proporcionado: " + (password != null && !password.isEmpty()));
+        
         D1UserData data = apiClient.verify(user.getUsername(), password);
         boolean valid = data != null;
-        System.out.println("D1UserStorageProvider.isValid: result=" + valid);
+        
+        System.err.println("DEBUG-D1: [CREDENTIAL_VALIDATOR] Validación contra D1 - Resultado: " + valid);
+        if (data != null) {
+            System.err.println("DEBUG-D1: [CREDENTIAL_VALIDATOR] Usuario en D1: " + data.getUsername() + " | Activo: " + data.isActive());
+        }
+        
         return valid;
     }
 

@@ -57,8 +57,10 @@ public class D1TokenAuthenticatorFactory implements AuthenticatorFactory, Config
 
     @Override
     public Authenticator create(KeycloakSession session) {
-        System.out.println("DEBUG-D1: Factory creando instancia de D1TokenAuthenticator");
-        return new D1TokenAuthenticator();
+        System.out.println("DEBUG-D1: [FACTORY] create() invocado - Thread: " + Thread.currentThread().getName() + " - ID: " + Thread.currentThread().getId());
+        D1TokenAuthenticator authenticator = new D1TokenAuthenticator();
+        System.out.println("DEBUG-D1: [FACTORY] Instancia de D1TokenAuthenticator creada exitosamente");
+        return authenticator;
     }
 
     @Override
