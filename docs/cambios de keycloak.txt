@@ -1,0 +1,43 @@
+cambios en la consola de Keycloak han sido:
+
+Authentication → Flows → browser → Verify Profile → puesto en Disabled
+Realm Settings → User profile → email → Required field: OFF
+Realm Settings → User profile → firstName → Required field: OFF
+Realm Settings → User profile → lastName → Required field: OFF
+
+Authentication → Required actions → desactiva verify Profile (OFF)
+debe estar asi:
+Configure OTP
+├── Enabled: ON
+└── Set as default action: OFF
+Terms and Conditions
+├── Enabled: OFF
+└── Set as default action: Disabled OFF
+Update Password
+├── Enabled: ON
+└── Set as default action: OFF
+Update Profile
+├── Enabled: ON
+└── Set as default action: OFF
+Verify Email
+├── Enabled: ON
+└── Set as default action: OFF
+Delete Account
+├── Enabled: OFF
+└── Set as default action: Disabled OFF
+Verify Profile
+├── Enabled: OFF
+└── Set as default action: Disabled OFF
+Webauthn Register
+├── Enabled: ON
+└── Set as default action: OFF
+Webauthn Register Passwordless
+├── Enabled: ON
+└── Set as default action: OFF
+Delete Credential
+├── Enabled: ON
+└── Set as default action: OFF
+Update User Locale
+├── Enabled: ON
+└── Set as default action: OFF
+
