@@ -48,6 +48,9 @@ Arquitectura SSO completa con 3 aplicaciones Django, Keycloak, Custom SPI y port
 - Docker y Docker Compose
 - Git
 - Puertos libres: 3306, 8080, 8001, 8002, 8003
+- Tener JDK (para Keycloak 24.0 minimo: 17) y Maven Instalados (java --version y mvn --version) sino:
+    sudo apt update
+    sudo apt install openjdk-17-jdk maven -y
 
 ### 1. Clonar el Proyecto
 
@@ -80,9 +83,9 @@ sso-mysql      Up X minutes (healthy)   0.0.0.0:3306->3306/tcp
 
 ```bash
 # Crear tablas en todas las bases de datos Django
-docker exec sso-d1 python manage.py migrate
-docker exec sso-d2 python manage.py migrate  
-docker exec sso-d3 python manage.py migrate
+docker exec sso-d1 python3 manage.py migrate
+docker exec sso-d2 python3 manage.py migrate  
+docker exec sso-d3 python3 manage.py migrate
 ```
 
 ### 4. Insertar Datos de Prueba
@@ -90,7 +93,7 @@ docker exec sso-d3 python manage.py migrate
 #### 4.1 Crear Usuarios y Grupos en Django (D1)
 
 ```bash
-docker exec sso-d1 python manage.py shell -c "
+docker exec sso-d1 python3 manage.py shell -c "
 from django.contrib.auth.models import User, Group
 
 # Crear grupos de aplicaciones
@@ -98,30 +101,23 @@ groups = {}
 for group_name in ['app-d1', 'app-d2', 'app-d3']:
     group, created = Group.objects.get_or_create(name=group_name)
     groups[group_name] = group
-    print(f'Grupo: {group_name} {'(creado)' if created else '(existía)'}')
+    status = '(creado)' if created else '(existía)'
+    print(f'Grupo: {group_name} {status}')
 
-# USUARIO 1: Sin acceso (para probar pantalla de 'no access')
+# USUARIO 1
 user_no_access, created = User.objects.get_or_create(
     username='user_no_access',
-    defaults={
-        'email': 'no_access@test.com',
-        'first_name': 'No',
-        'last_name': 'Access'
-    }
+    defaults={'email': 'no_access@test.com', 'first_name': 'No', 'last_name': 'Access'}
 )
 if created: 
     user_no_access.set_password('pass123')
     user_no_access.save()
 print(f'✓ Usuario sin acceso: {user_no_access.username}')
 
-# USUARIO 2: Acceso único a D1 (redirección automática)
+# USUARIO 2
 user_single, created = User.objects.get_or_create(
     username='user_d1_only',
-    defaults={
-        'email': 'user_d1@test.com',
-        'first_name': 'D1',
-        'last_name': 'Only'
-    }
+    defaults={'email': 'user_d1@test.com', 'first_name': 'D1', 'last_name': 'Only'}
 )
 if created: 
     user_single.set_password('pass123')
@@ -130,14 +126,10 @@ user_single.groups.clear()
 user_single.groups.add(groups['app-d1'])
 print(f'✓ Usuario acceso único: {user_single.username} → D1')
 
-# USUARIO 3: Acceso múltiple D1+D3 (pantalla de selección)
+# USUARIO 3
 user_multi, created = User.objects.get_or_create(
     username='user_d1_d3',
-    defaults={
-        'email': 'user_multi@test.com',
-        'first_name': 'Multi',
-        'last_name': 'Access'
-    }
+    defaults={'email': 'user_multi@test.com', 'first_name': 'Multi', 'last_name': 'Access'}
 )
 if created:
     user_multi.set_password('pass123')
@@ -146,26 +138,30 @@ user_multi.groups.clear()
 user_multi.groups.add(groups['app-d1'], groups['app-d3'])
 print(f'✓ Usuario acceso múltiple: {user_multi.username} → D1, D3')
 
-# USUARIO 4: Super admin con acceso completo (selector completo)
+# USUARIO 4
 user_admin, created = User.objects.get_or_create(
     username='user_admin',
-    defaults={
-        'email': 'admin@test.com',
-        'first_name': 'Super',
-        'last_name': 'Admin'
-    }
+    defaults={'email': 'admin@test.com', 'first_name': 'Super', 'last_name': 'Admin'}
 )
 if created:
     user_admin.set_password('admin123')
     user_admin.save()
 user_admin.groups.clear()
-for group in groups.values():
-    user_admin.groups.add(group)
+for g in groups.values():
+    user_admin.groups.add(g)
 print(f'✓ Usuario administrador: {user_admin.username} → D1, D2, D3')
 
-print('\\n🎉 Usuarios de prueba creados exitosamente!')
+print('\n🎉 Usuarios de prueba creados exitosamente!')
 "
+
 ```
+
+Crear el superuser de D1:
+python3 manage.py createsuperuser
+
+user: goar
+email: goar@home.es
+pass: Test123*
 
 #### 4.2 Configurar Keycloak
 
@@ -182,29 +178,49 @@ print('\\n🎉 Usuarios de prueba creados exitosamente!')
 
 3. **Crear/Verificar Clients OIDC:**
 
-   **Client D1:**
-   ```
-   Client ID: d1-client
-   Client Secret: d1-secret-mvp
-   Valid Redirect URIs: http://localhost:8001/oidc/callback/
-   Web Origins: http://localhost:8001
-   ```
+    ### 3.1 Cliente d1-client
 
-   **Client D2:**
-   ```
-   Client ID: d2-client  
-   Client Secret: d2-secret-mvp
-   Valid Redirect URIs: http://localhost:8002/oidc/callback/
-   Web Origins: http://localhost:8002
-   ```
+    1. **Menú lateral:** `Clients`
+    2. **Click:** `Create client`
+    3. **Configuración inicial:**
+    - **Client type:** `OpenID Connect`
+    - **Client ID:** `d1-client`
+    - **Click:** `Next`
+    4. **Capability config:**
+    - **Client authentication:** `ON`
+    - **Click:** `Next`
+    5. **Login settings:**
+    - **Root URL:** `http://localhost:8001`
+    - **Home URL:** `http://localhost:8001`
+    - **Valid redirect URIs:** `http://localhost:8001/oidc/callback/*`
+    - **Web origins:** `http://localhost:8001`
+    - **Click:** `Save`
+    6. **Configurar Client Secret:**
+    - **Ir a pestaña:** `Credentials`
+    - **Verificar Client Secret:** `9LH147ogjTBktGVrHo1cccdXKq424dF1`
+    - Si no coincide, configurar manualmente la variable de .env con el valor que está credencials: Secret Client
 
-   **Client D3:**
-   ```
-   Client ID: d3-client
-   Client Secret: d3-secret-mvp
-   Valid Redirect URIs: http://localhost:8003/oidc/callback/
-   Web Origins: http://localhost:8003
-   ```
+    ### 3.2 Cliente d2-client
+
+    1. **Repetir proceso anterior con:**
+    - **Client ID:** `d2-client`
+    - **Root URL:** `http://localhost:8002`
+    - **Home URL:** `http://localhost:8002`
+    - **Valid redirect URIs:** `http://localhost:8002/oidc/callback/*`
+    - **Web origins:** `http://localhost:8002`
+    - **Client Secret:** `OMjvCgixedkHDGIkNmTcrbl2bohQ3lmc`
+    - Si no coincide, configurar manualmente la variable de .env con el valor que está credencials: Secret Client
+
+    ### 3.3 Cliente d3-client
+
+    1. **Repetir proceso anterior con:**
+    - **Client ID:** `d3-client`
+    - **Root URL:** `http://localhost:8003`
+    - **Home URL:** `http://localhost:8003`
+    - **Valid redirect URIs:** `http://localhost:8003/oidc/callback/*`
+    - **Web origins:** `http://localhost:8003`
+    - **Client Secret:** `0tLDiDk8qbd1O6nZT1EYjkm0mwWIlGfX`
+    - Si no coincide, configurar manualmente la variable de .env con el valor que está credencials: Secret Client
 
 4. **Configurar Custom User Storage (D1 SPI):**
    - Ir a "User Federation" 

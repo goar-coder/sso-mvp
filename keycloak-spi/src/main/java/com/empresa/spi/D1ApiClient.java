@@ -47,6 +47,7 @@ public class D1ApiClient {
     }
 
     public D1UserData findByUsername(String username) {
+        System.err.println("DEBUG-D1: username: " + username);
         HttpRequest request = HttpRequest.newBuilder()
                 .uri(URI.create(baseUrl + "/api/internal/auth/user/?username=" + username))
                 .header("X-Internal-Api-Key", apiKey)

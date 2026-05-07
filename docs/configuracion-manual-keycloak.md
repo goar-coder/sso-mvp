@@ -40,7 +40,7 @@ Los siguientes clientes deben crearse para cada aplicación Django:
 6. **Configurar Client Secret:**
    - **Ir a pestaña:** `Credentials`
    - **Verificar Client Secret:** `9LH147ogjTBktGVrHo1cccdXKq424dF1`
-   - Si no coincide, regenerar o configurar manualmente
+   - Si no coincide, configurar manualmente la variable de .env con el valor que está credencials: Secret Client
 
 ### 2.2 Cliente d2-client
 
@@ -51,6 +51,7 @@ Los siguientes clientes deben crearse para cada aplicación Django:
    - **Valid redirect URIs:** `http://localhost:8002/oidc/callback/*`
    - **Web origins:** `http://localhost:8002`
    - **Client Secret:** `OMjvCgixedkHDGIkNmTcrbl2bohQ3lmc`
+   - Si no coincide, configurar manualmente la variable de .env con el valor que está credencials: Secret Client
 
 ### 2.3 Cliente d3-client
 
@@ -61,6 +62,7 @@ Los siguientes clientes deben crearse para cada aplicación Django:
    - **Valid redirect URIs:** `http://localhost:8003/oidc/callback/*`
    - **Web origins:** `http://localhost:8003`
    - **Client Secret:** `0tLDiDk8qbd1O6nZT1EYjkm0mwWIlGfX`
+   - Si no coincide, configurar manualmente la variable de .env con el valor que está credencials: Secret Client
 
 ## 3. Configurar Authentication Flow
 

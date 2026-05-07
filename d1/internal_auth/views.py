@@ -41,17 +41,27 @@ def verify_user(request):
         body = json.loads(request.body)
         username = body.get('username', '').strip()
         password = body.get('password', '')
+        print("verificar usuario...")
+        print("username:" + username)
+        print("password:" + password)
     except (json.JSONDecodeError, AttributeError):
+        print("no valido: JSONDecodeError 400")
         return JsonResponse({'valid': False}, status=400)
 
     if not username or not password:
+        print("no valido: not username or not password")
         return JsonResponse({'valid': False})
 
     user = authenticate(request, username=username, password=password)
 
-    if user is None or not user.is_active:
+    if user is None:
+        print("no valido: user is None")
+        return JsonResponse({'valid': False})
+    if not user.is_active:
+        print("no valido: not user.is_active")
         return JsonResponse({'valid': False})
 
+    print("valido: OKKKK")
     return JsonResponse({
         'valid': True,
         'user': user_to_dict(user),

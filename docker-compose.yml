@@ -11,7 +11,7 @@ services:
       - mysql-data:/var/lib/mysql
       - ./mysql/init.sql:/docker-entrypoint-initdb.d/init.sql
     ports:
-      - "3306:3306"
+      - "3307:3306" # para que no de conflictos con mysql corriendo local
     networks:
       - sso-network
     healthcheck:

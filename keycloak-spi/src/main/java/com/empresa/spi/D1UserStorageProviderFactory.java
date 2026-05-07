@@ -19,6 +19,17 @@ public class D1UserStorageProviderFactory
     }
 
     @Override
+    public void onCreate(KeycloakSession session, RealmModel realm, ComponentModel model) {
+        model.getConfig().putSingle("importEnabled", "false");
+    }
+
+    @Override
+    public void onUpdate(KeycloakSession session, RealmModel realm, 
+                        ComponentModel oldModel, ComponentModel newModel) {
+        newModel.getConfig().putSingle("importEnabled", "false");
+    }
+
+    @Override
     public D1UserStorageProvider create(KeycloakSession session, ComponentModel model) {
         String d1Url = model.getConfig().getFirst("d1Url");
         String apiKey = model.getConfig().getFirst("apiKey");
