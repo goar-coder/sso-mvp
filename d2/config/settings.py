@@ -75,12 +75,18 @@ OIDC_OP_JWKS_ENDPOINT          = 'http://localhost:8080/realms/django-realm/prot
 OIDC_OP_AUTHORIZATION_ENDPOINT = 'http://localhost:8080/realms/django-realm/protocol/openid-connect/auth'
 OIDC_OP_TOKEN_ENDPOINT         = 'http://localhost:8080/realms/django-realm/protocol/openid-connect/token'
 OIDC_OP_USER_ENDPOINT          = 'http://localhost:8080/realms/django-realm/protocol/openid-connect/userinfo'
-OIDC_OP_LOGOUT_ENDPOINT        = 'http://localhost:8080/realms/django-realm/protocol/openid-connect/logout'
+# OIDC_OP_LOGOUT_ENDPOINT        = 'http://localhost:8080/realms/django-realm/protocol/openid-connect/logout'
 
 OIDC_OP_ISSUER = 'http://localhost:8080/realms/django-realm'
 
 LOGIN_URL           = '/oidc/authenticate/'
 LOGIN_REDIRECT_URL  = '/home/'  # D2 va directo a su home, no al portal
-LOGOUT_REDIRECT_URL = '/'
+# LOGOUT_REDIRECT_URL = '/'
 
 OIDC_CREATE_USER = True
+
+# Logout también en Keycloak
+OIDC_OP_LOGOUT_ENDPOINT = 'http://localhost:8080/realms/django-realm/protocol/openid-connect/logout'
+OIDC_OP_LOGOUT_URL_METHOD = 'GET'
+LOGOUT_REDIRECT_URL = '/oidc/authenticate/'
+OIDC_STORE_ID_TOKEN = True

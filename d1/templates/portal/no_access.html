@@ -4,6 +4,9 @@
 <body>
   <h2>No tienes acceso a ninguna aplicación</h2>
   <p>Contacta con el administrador.</p>
-  <a href="/oidc/logout/">Cerrar sesión</a>
+  <form method="post" action="/oidc/logout/">
+    {% csrf_token %}
+    <button type="submit">Cerrar sesión</button>
+  </form>
 </body>
 </html>

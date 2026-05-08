@@ -70,3 +70,9 @@ Add to userinfo:    ON
 La misma configuración para d2-client y d3-client
 
 Client scopes → roles → pestaña Mappers → click en realm roles →  Add to ID token: ON (obligatorio)
+
+Ponerlo en la configuracion de los clientes iniciales
+para todos los clientes http://localhost:8001/* para que regresen a d1
+Clients → d1-client → Settings → Valid post logout redirect URIs → añade http://localhost:8001/*
+Clients → d2-client → Settings → Valid post logout redirect URIs → añade http://localhost:8001/*
+Clients → d3-client → Settings → Valid post logout redirect URIs → añade http://localhost:8001/*

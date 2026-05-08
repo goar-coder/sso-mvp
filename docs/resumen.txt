@@ -1,0 +1,576 @@
+# Documentación del Sistema SSO con Keycloak y Django
+
+## Índice
+
+1. Visión general
+2. Arquitectura del sistema
+3. Componentes principales
+4. Keycloak — Servidor de autenticación
+5. SPI — User Storage Provider
+6. Django D1 — Fuente de verdad
+7. Django D2 y D3 — Aplicaciones cliente
+8. Flujos de autenticación
+9. Flujo de logout
+10. Mapeo de roles
+11. Configuración Docker
+12. Problemas resueltos durante el desarrollo
+13. Resumen de configuraciones
+
+---
+
+## 1. Visión general
+
+El sistema implementa un SSO (Single Sign-On) que permite a los usuarios autenticarse una sola vez y acceder a tres aplicaciones Django independientes (D1, D2 y D3) sin necesidad de volver a introducir sus credenciales.
+
+La fuente de verdad de los usuarios es Django D1. Keycloak actúa como servidor de autenticación centralizado y delega la verificación de credenciales a D1 mediante un SPI (Service Provider Interface) personalizado. Las aplicaciones D1, D2 y D3 usan el protocolo OIDC (OpenID Connect) para autenticar a sus usuarios contra Keycloak.
+
+Los usuarios están definidos únicamente en Django D1 y nunca se persisten en Keycloak. Los roles de acceso a las aplicaciones se definen mediante grupos de Django y se transmiten a través del token JWT de Keycloak.
+
+---
+
+## 2. Arquitectura del sistema
+
+```
+Navegador
+    │
+    ├──► http://localhost:8001  (D1 — fuente de verdad + portal)
+    ├──► http://localhost:8002  (D2 — aplicación cliente)
+    └──► http://localhost:8003  (D3 — aplicación cliente)
+              │
+              │ OIDC (OpenID Connect)
+              ▼
+    http://localhost:8080  (Keycloak)
+              │
+              │ HTTP REST (API interna)
+              ▼
+    http://d1:8001  (Django D1 — API interna)
+              │
+              ▼
+    MySQL (base de datos de usuarios)
+```
+
+Todos los servicios corren en una red Docker interna llamada `sso-network`. Los contenedores se comunican entre sí por nombre de servicio (`keycloak`, `d1`, `d2`, `d3`, `mysql`). El navegador accede a todos los servicios por `localhost` con el puerto correspondiente.
+
+---
+
+## 3. Componentes principales
+
+### Usuarios definidos en Django D1
+
+| Usuario       | Password | Grupos              | Acceso               |
+|---------------|----------|---------------------|----------------------|
+| user_no_access | pass123  | ninguno             | ninguna app          |
+| user_d1_only  | pass123  | app-d1              | solo D1              |
+| user_d1_d3    | pass123  | app-d1, app-d3      | D1 y D3              |
+| user_admin    | admin123 | app-d1, app-d2, app-d3 | D1, D2 y D3       |
+
+### Mapeo de grupos a roles
+
+```python
+GROUP_TO_APP_ROLE = {
+    'app-d1': 'd1-access',
+    'app-d2': 'd2-access',
+    'app-d3': 'd3-access',
+}
+```
+
+Los grupos de Django se convierten en roles de aplicación. Estos roles se incluyen en el JWT de Keycloak bajo el claim `realm_access.roles` y son leídos por cada aplicación Django al hacer login.
+
+### Roles en Keycloak Realm
+
+En el realm `django-realm` existen tres roles de realm:
+- `d1-access`
+- `d2-access`
+- `d3-access`
+
+Estos roles deben existir en Keycloak para que el SPI pueda asignarlos via `getRealmRoleMappingsStream()`.
+
+---
+
+## 4. Keycloak — Servidor de autenticación
+
+### Realm
+
+El realm se llama `django-realm`. Todos los clientes y el SPI operan dentro de este realm.
+
+### Clientes OIDC
+
+Hay tres clientes configurados, uno por cada aplicación Django:
+
+**d1-client:**
+- Root URL: `http://localhost:8001`
+- Home URL: `http://localhost:8001`
+- Valid redirect URIs: `http://localhost:8001/oidc/callback/*`
+- Web origins: `http://localhost:8001`
+- Valid post logout redirect URIs: `http://localhost:8001/*`
+- Client authentication: ON (confidential client)
+
+**d2-client:**
+- Root URL: `http://localhost:8002`
+- Home URL: `http://localhost:8002`
+- Valid redirect URIs: `http://localhost:8002/oidc/callback/*`
+- Web origins: `http://localhost:8002`
+- Valid post logout redirect URIs: `http://localhost:8001/*`
+- Client authentication: ON
+
+**d3-client:**
+- Root URL: `http://localhost:8003`
+- Home URL: `http://localhost:8003`
+- Valid redirect URIs: `http://localhost:8003/oidc/callback/*`
+- Web origins: `http://localhost:8003`
+- Valid post logout redirect URIs: `http://localhost:8001/*`
+- Client authentication: ON
+
+Nota importante: Los `Valid post logout redirect URIs` de D2 y D3 apuntan a `http://localhost:8001/*` porque después del logout el usuario siempre vuelve al portal de D1 para volver a elegir aplicación.
+
+### Mappers por cliente (en el dedicated scope de cada cliente)
+
+Cada cliente tiene dos mappers configurados en su `*-client-dedicated` scope:
+
+**Mapper 1 — User Property:**
+```
+Name:               preferred-username
+Mapper Type:        User Property
+Property:           username
+Token Claim Name:   preferred_username
+Claim JSON Type:    String
+Add to ID token:    ON
+Add to access token: ON
+Add to userinfo:    ON
+```
+
+Este mapper es necesario porque los usuarios son externos (SPI) y el scope `profile` no siempre incluye `preferred_username` para usuarios externos.
+
+**Mapper 2 — User Attribute:**
+```
+Name:               app-roles
+Mapper Type:        User Attribute
+User Attribute:     app_roles
+Token Claim Name:   app_roles
+Claim JSON Type:    String
+Multivalued:        ON
+Add to ID token:    ON
+Add to access token: ON
+Add to userinfo:    ON
+```
+
+Este mapper lee el atributo `app_roles` que expone el SPI via `getAttributes()` en el adapter.
+
+### Scope roles — realm roles
+
+En `Client scopes` → `roles` → `Mappers` → `realm roles`:
+- `Add to ID token: ON`
+
+Esto es necesario para que los roles del realm asignados por el SPI aparezcan en el token bajo `realm_access.roles`.
+
+### User Profile (Realm Settings)
+
+Los campos `email`, `firstName` y `lastName` tienen `Required field: OFF` porque los usuarios son externos y Keycloak no gestiona su perfil.
+
+### Required Actions
+
+`Update Profile` y `Verify Profile` están desactivados como default actions para evitar que Keycloak pida completar el perfil en el primer login.
+
+### Frontend URL
+
+En `Realm Settings` → `General` → `Frontend URL` está configurado como `http://localhost:8080`. Esto es crítico para que el issuer del token sea consistente con la URL que usan las aplicaciones Django para verificarlo. Sin esta configuración el issuer del token era `http://localhost:8080` pero Django llamaba a `http://keycloak:8080/userinfo` causando un error 401.
+
+### User Federation
+
+El SPI está registrado en `User Federation` con:
+- Provider: `d1-user-storage`
+- D1 Base URL: `http://d1:8001`
+- Internal API Key: (valor configurado en .env)
+
+---
+
+## 5. SPI — User Storage Provider
+
+El SPI es un JAR Java desplegado en `/opt/keycloak/providers/` que implementa el patrón User Storage Provider de Keycloak. Delega la autenticación y búsqueda de usuarios a la API interna de Django D1.
+
+### Clases del SPI
+
+**D1UserStorageProviderFactory**
+Factory que crea instancias del provider. Lee la configuración (`d1Url` y `apiKey`) del modelo de componente de Keycloak. Expone dos propiedades configurables desde la UI de Keycloak Admin: `D1 Base URL` y `Internal API Key`.
+
+**D1UserStorageProvider**
+Implementa tres interfaces de Keycloak:
+- `UserStorageProvider`: interfaz base obligatoria
+- `UserLookupProvider`: para buscar usuarios por username, id o email
+- `CredentialInputValidator`: para validar contraseñas
+
+Métodos principales:
+- `getUserByUsername()`: llama a `GET /api/internal/auth/user/?username=X` en D1
+- `getUserById()`: extrae el username del StorageId y delega a `getUserByUsername()`
+- `isValid()`: llama a `POST /api/internal/auth/verify/` en D1 con username y password
+
+**D1ApiClient**
+Cliente HTTP que se comunica con la API interna de D1. Usa `java.net.http.HttpClient` con timeout de 5 segundos. Añade el header `X-Internal-Api-Key` en todas las peticiones para autenticación.
+
+**D1UserAdapter**
+Adapta los datos de D1 (`D1UserData`) al formato `UserModel` que espera Keycloak. Puntos clave:
+- `getId()`: usa `StorageId.keycloakId(componentModel, data.getUsername())` — el username es el externalId, no el PK de Django
+- `getAttributes()`: expone `app_roles` como atributo de usuario para que el mapper de Keycloak pueda incluirlo en el token
+- `getRealmRoleMappingsStream()`: convierte los `app_roles` en roles del realm de Keycloak
+- `credentialManager()`: usa `UserCredentialManager` de Keycloak 24
+- `getRequiredActionsStream()`: devuelve `Stream.empty()` para evitar que Keycloak muestre pantallas de completar perfil
+- Todos los setters son no-ops porque el usuario es de solo lectura (Django es la fuente de verdad)
+
+**D1UserData**
+POJO que representa un usuario de Django con los campos: `id`, `username`, `email`, `firstName`, `lastName`, `active`, `appRoles`.
+
+### API interna de D1 que usa el SPI
+
+El SPI llama a dos endpoints de Django D1:
+
+**GET /api/internal/auth/user/?username=X**
+Busca un usuario por username. Responde:
+```json
+{
+  "found": true,
+  "user": {
+    "id": "5",
+    "username": "user_d1_only",
+    "email": "user@test.com",
+    "first_name": "D1",
+    "last_name": "Only",
+    "is_active": true,
+    "app_roles": ["d1-access"]
+  }
+}
+```
+
+**POST /api/internal/auth/verify/**
+Verifica credenciales. Body: `{"username": "...", "password": "..."}`. Responde:
+```json
+{
+  "valid": true,
+  "user": { ... }
+}
+```
+
+Ambos endpoints están protegidos por `InternalApiKeyMiddleware` que verifica el header `X-Internal-Api-Key`.
+
+---
+
+## 6. Django D1 — Fuente de verdad
+
+D1 tiene tres roles: fuente de verdad de usuarios, portal de selección de aplicaciones y proveedor de la API interna para el SPI.
+
+### Apps instaladas
+- `internal_auth`: expone la API interna para el SPI
+- `portal`: gestiona el post-login y el selector de aplicaciones
+- `mozilla_django_oidc`: cliente OIDC
+
+### Auth backends
+```python
+AUTHENTICATION_BACKENDS = [
+    'django.contrib.auth.backends.ModelBackend',  # para /admin/
+    'portal.auth_backend.CustomOIDCBackend',       # para OIDC
+]
+```
+
+### CustomOIDCBackend (portal/auth_backend.py)
+
+Sobrescribe `OIDCAuthenticationBackend` para:
+- `verify_claims()`: solo requiere `sub` y `preferred_username` (no `email`) porque los usuarios externos pueden no tener email
+- `get_username()`: usa `preferred_username` del token
+- `filter_users_by_claims()`: busca usuarios por `username` en lugar de `email`
+- `create_user()`: crea el usuario local en Django con el username del token
+- `get_or_create_user()`: extrae los roles de `realm_access.roles` del payload y los guarda en `request.session['oidc_app_roles']`
+
+### Portal (portal/views.py)
+
+`post_login` lee `oidc_app_roles` de la sesión y decide:
+- 0 roles → renderiza `portal/no_access.html`
+- 1 rol → redirect directo a la URL de la app correspondiente
+- 2+ roles → renderiza `portal/selector.html` con las opciones
+
+```python
+APP_URLS = {
+    'd1-access': 'http://localhost:8001/home/',
+    'd2-access': 'http://localhost:8002/home/',
+    'd3-access': 'http://localhost:8003/home/',
+}
+```
+
+`KeycloakLogoutView` sobrescribe `OIDCLogoutView` para hacer logout también en Keycloak, no solo en Django:
+```
+POST /oidc/logout/ → logout local Django → redirect a Keycloak logout → redirect a http://localhost:8001/
+```
+
+### Configuración OIDC en settings.py
+
+Todas las URLs de Keycloak apuntan a `http://localhost:8080` (no a `http://keycloak:8080`) para que el issuer del token sea consistente. Los contenedores D1/D2/D3 pueden acceder a `localhost:8080` gracias a `extra_hosts: localhost:host-gateway` en el docker-compose.
+
+```python
+OIDC_OP_JWKS_ENDPOINT          = 'http://localhost:8080/realms/django-realm/protocol/openid-connect/certs'
+OIDC_OP_AUTHORIZATION_ENDPOINT = 'http://localhost:8080/realms/django-realm/protocol/openid-connect/auth'
+OIDC_OP_TOKEN_ENDPOINT         = 'http://localhost:8080/realms/django-realm/protocol/openid-connect/token'
+OIDC_OP_USER_ENDPOINT          = 'http://localhost:8080/realms/django-realm/protocol/openid-connect/userinfo'
+OIDC_OP_LOGOUT_ENDPOINT        = 'http://localhost:8080/realms/django-realm/protocol/openid-connect/logout'
+OIDC_OP_ISSUER                 = 'http://localhost:8080/realms/django-realm'
+OIDC_STORE_ID_TOKEN            = True
+LOGIN_REDIRECT_URL             = '/post-login/'
+LOGOUT_REDIRECT_URL            = '/oidc/authenticate/'
+```
+
+---
+
+## 7. Django D2 y D3 — Aplicaciones cliente
+
+D2 y D3 son aplicaciones cliente simples. Su única función es mostrar contenido al usuario autenticado y permitir el logout.
+
+Comparten la misma estructura que D1 en cuanto a OIDC:
+- Mismo `CustomOIDCBackend` en `portal/auth_backend.py`
+- Misma configuración OIDC en `settings.py`
+- `KeycloakLogoutView` con `post_logout_redirect_uri` apuntando a `http://localhost:8001/oidc/authenticate/`
+
+La diferencia con D1 es que D2 y D3 no tienen `internal_auth` ni la vista `post_login` del portal de selección. Su `LOGIN_REDIRECT_URL` es `/home/`.
+
+---
+
+## 8. Flujos de autenticación
+
+### Flujo completo de login
+
+```
+1. Usuario abre http://localhost:8001/ (o D2/D3)
+2. Django detecta que no está autenticado → redirect a /oidc/authenticate/
+3. mozilla_django_oidc redirige al navegador a:
+   http://localhost:8080/realms/django-realm/protocol/openid-connect/auth
+   ?client_id=d1-client&redirect_uri=http://localhost:8001/oidc/callback/&...
+4. Keycloak muestra el formulario de login
+5. Usuario introduce username y password
+6. Keycloak llama al SPI:
+   a. getUserByUsername(username) → GET http://d1:8001/api/internal/auth/user/?username=X
+   b. isValid(user, password) → POST http://d1:8001/api/internal/auth/verify/
+7. Django D1 valida con authenticate() y responde
+8. Si las credenciales son válidas, Keycloak genera el JWT con:
+   - preferred_username
+   - realm_access.roles (d1-access, d2-access, d3-access según grupos)
+9. Keycloak redirige al navegador a:
+   http://localhost:8001/oidc/callback/?code=XXX&state=YYY
+10. Django (mozilla_django_oidc) intercambia el code por tokens
+11. Django llama a /userinfo para obtener los claims del usuario
+12. CustomOIDCBackend.get_or_create_user():
+    a. Crea o recupera el usuario local en la BD de D1
+    b. Extrae los roles de realm_access.roles
+    c. Guarda los roles en request.session['oidc_app_roles']
+13. Redirect a LOGIN_REDIRECT_URL (/post-login/ en D1)
+14. post_login() lee los roles de la sesión y decide:
+    - 0 roles → página de sin acceso
+    - 1 rol → redirect directo a la app
+    - 2+ roles → selector de aplicaciones
+```
+
+### Flujo de SSO (segunda aplicación)
+
+Cuando el usuario ya está autenticado en D1 y accede a D2:
+
+```
+1. Usuario abre http://localhost:8002/
+2. D2 detecta que no está autenticado → redirect a /oidc/authenticate/
+3. D2 redirige al navegador a Keycloak
+4. Keycloak detecta que ya hay una sesión activa (SSO cookie)
+5. Keycloak NO muestra el formulario de login
+6. Keycloak emite un nuevo token para d2-client directamente
+7. D2 recibe el token y autentica al usuario automáticamente
+8. Usuario llega a /home/ de D2 sin haber introducido credenciales
+```
+
+---
+
+## 9. Flujo de logout
+
+```
+1. Usuario hace click en "Cerrar sesión" (formulario POST)
+2. POST /oidc/logout/ → KeycloakLogoutView.post()
+3. logout(request) → cierra la sesión local de Django
+4. Redirect a Keycloak:
+   GET http://localhost:8080/realms/django-realm/protocol/openid-connect/logout
+   ?post_logout_redirect_uri=http://localhost:8001/oidc/authenticate/
+   &client_id=dX-client
+   &id_token_hint=XXX (si está disponible)
+5. Keycloak invalida la sesión SSO
+6. Keycloak redirige a http://localhost:8001/oidc/authenticate/
+7. D1 detecta que no hay sesión → redirect al formulario de login de Keycloak
+```
+
+El `id_token_hint` es importante para que Keycloak sepa qué sesión invalidar. Se guarda gracias a `OIDC_STORE_ID_TOKEN = True` en settings. Si no está disponible, se usa `client_id` como fallback.
+
+---
+
+## 10. Mapeo de roles
+
+El flujo completo del mapeo de roles es:
+
+```
+Django D1 (grupos de usuario)
+    │
+    │ get_app_roles() en internal_auth/views.py
+    ▼
+app_roles en la respuesta JSON de la API interna
+    │
+    │ D1ApiClient.parseUser()
+    ▼
+D1UserData.appRoles
+    │
+    │ D1UserAdapter.getAttributes() → {"app_roles": ["d1-access"]}
+    ▼
+Mapper "User Attribute" en Keycloak
+    │
+    │ D1UserAdapter.getRealmRoleMappingsStream()
+    ▼
+Roles del realm asignados en la sesión de Keycloak
+    │
+    │ Mapper "realm roles" (scope roles, Add to ID token: ON)
+    ▼
+JWT token: realm_access.roles = ["d1-access", ...]
+    │
+    │ CustomOIDCBackend.get_or_create_user()
+    ▼
+request.session['oidc_app_roles'] = ["d1-access", ...]
+    │
+    │ portal/views.py post_login()
+    ▼
+Redirección según acceso del usuario
+```
+
+---
+
+## 11. Configuración Docker
+
+### docker-compose.yml — puntos clave
+
+**extra_hosts en D1, D2 y D3:**
+```yaml
+extra_hosts:
+  - "localhost:host-gateway"
+```
+Esto permite que los contenedores Django resuelvan `localhost` como la máquina host, donde Keycloak está expuesto en el puerto 8080. Sin esto, `localhost` dentro del contenedor sería el propio contenedor, no Keycloak.
+
+**Red interna:**
+Todos los servicios comparten la red `sso-network` (bridge). Los contenedores se comunican por nombre de servicio: `mysql`, `keycloak`, `d1`, `d2`, `d3`.
+
+**SPI montado como volumen:**
+```yaml
+- ./keycloak/spi/d1-user-storage-spi.jar:/opt/keycloak/providers/d1-user-storage-spi.jar
+```
+
+**Puertos expuestos:**
+- `8080`: Keycloak
+- `8001`: D1
+- `8002`: D2
+- `8003`: D3
+- `3307`: MySQL (mapeado a 3307 para evitar conflictos con MySQL local)
+
+---
+
+## 12. Problemas resueltos durante el desarrollo
+
+### 1. getUserById usaba el PK de Django como externalId
+**Problema:** `StorageId.keycloakId()` guardaba el PK numérico de Django como externalId. Al recuperar el usuario por ID, `StorageId.externalId()` devolvía el PK en lugar del username, y `getUserByUsername()` fallaba.
+
+**Solución:** Cambiar `D1UserAdapter.getId()` para usar `data.getUsername()` como externalId en lugar de `data.getId()`.
+
+### 2. UnsupportedOperationException en credentialManager
+**Problema:** Keycloak intentaba evaluar si el usuario tenía OTP configurado, llamando a `credentialManager()` que lanzaba `UnsupportedOperationException`.
+
+**Solución:** Implementar `credentialManager()` con `new UserCredentialManager(session, realm, this)`.
+
+### 3. ReadOnlyException al intentar escribir atributos
+**Problema:** Keycloak intentaba guardar la required action `UPDATE_PROFILE` y otros atributos en el usuario externo.
+
+**Solución:** Sobrescribir todos los métodos de escritura (`setAttribute`, `setSingleAttribute`, `removeAttribute`, `setEmailVerified`, `setEnabled`, `addRequiredAction`, `removeRequiredAction`) con implementaciones vacías. Además `getRequiredActionsStream()` devuelve `Stream.empty()`.
+
+### 4. Pantalla pidiendo email, firstname y lastname
+**Problema:** Keycloak mostraba una pantalla pidiendo completar el perfil porque los campos eran obligatorios y los usuarios externos no los tenían.
+
+**Solución:** En `Realm Settings` → `User profile` poner `Required field: OFF` para `email`, `firstName` y `lastName`. Desactivar `Verify Profile` en el flujo de autenticación.
+
+### 5. 401 Unauthorized en /userinfo
+**Problema:** Django llamaba a `http://keycloak:8080/userinfo` pero el token tenía `issuer=http://localhost:8080`. Keycloak rechazaba el token por issuer inconsistente.
+
+**Solución:** Configurar `Frontend URL = http://localhost:8080` en Keycloak y usar `extra_hosts: localhost:host-gateway` en Docker para que todos los contenedores Django usen `localhost:8080` tanto para las llamadas del navegador como para las llamadas server-side.
+
+### 6. Claims verification failed
+**Problema:** `mozilla_django_oidc` requiere el claim `email` por defecto para verificar al usuario. Los usuarios externos no tienen email en el token.
+
+**Solución:** Sobrescribir `verify_claims()` en `CustomOIDCBackend` para solo requerir `sub` y `preferred_username`.
+
+### 7. app_roles no llegaba en el token
+**Problema:** El mapper `User Realm Role` no funcionaba porque los usuarios externos no tienen roles persistidos en Keycloak.
+
+**Solución en dos partes:**
+- Añadir `getAttributes()` en `D1UserAdapter` para exponer `app_roles` como atributo
+- Activar `Add to ID token: ON` en el mapper `realm roles` del scope `roles`
+- Leer los roles de `realm_access.roles` en `CustomOIDCBackend.get_or_create_user()`
+
+### 8. preferred_username desaparecía del token
+**Problema:** El scope `profile` no siempre incluía `preferred_username` para usuarios externos.
+
+**Solución:** Añadir un mapper explícito `User Property` en cada `*-client-dedicated` scope con `Token Claim Name: preferred_username` (con guión bajo, no guión).
+
+### 9. Logout no cerraba la sesión en Keycloak
+**Problema:** `mozilla_django_oidc` cerraba la sesión local de Django pero no la sesión SSO de Keycloak. Al volver a la app, el usuario se autenticaba automáticamente sin pedir credenciales.
+
+**Solución:** Sobrescribir `OIDCLogoutView` con `KeycloakLogoutView` que redirige al endpoint de logout de Keycloak con `post_logout_redirect_uri`, `client_id` e `id_token_hint`.
+
+### 10. Logout de D2/D3 volvía a D2/D3 en lugar de al portal
+**Problema:** Después del logout de D2, Keycloak redirigía a `http://localhost:8002/` y D2 volvía a autenticar al usuario automáticamente sin pasar por el portal de selección de D1.
+
+**Solución:** Cambiar `post_logout_redirect_uri` en D2 y D3 a `http://localhost:8001/oidc/authenticate/` y añadir `http://localhost:8001/*` en los `Valid post logout redirect URIs` de d2-client y d3-client.
+
+---
+
+## 13. Resumen de configuraciones
+
+### Variables de entorno por servicio
+
+**D1:**
+```
+OIDC_RP_CLIENT_ID=d1-client
+OIDC_RP_CLIENT_SECRET=<secret>
+KEYCLOAK_URL=http://keycloak:8080
+INTERNAL_API_KEY=<api-key>
+```
+
+**D2:**
+```
+OIDC_RP_CLIENT_ID=d2-client
+OIDC_RP_CLIENT_SECRET=<secret>
+KEYCLOAK_URL=http://keycloak:8080
+```
+
+**D3:**
+```
+OIDC_RP_CLIENT_ID=d3-client
+OIDC_RP_CLIENT_SECRET=<secret>
+KEYCLOAK_URL=http://keycloak:8080
+```
+
+### Checklist de configuración de Keycloak
+
+- [ ] Realm `django-realm` creado
+- [ ] Roles de realm creados: `d1-access`, `d2-access`, `d3-access`
+- [ ] SPI `d1-user-storage` registrado en User Federation con URL y API key correctas
+- [ ] Frontend URL configurado como `http://localhost:8080`
+- [ ] User profile: email, firstName, lastName con Required field OFF
+- [ ] Required actions: Update Profile y Verify Profile sin Default action
+- [ ] Scope `roles` → mapper `realm roles` → Add to ID token ON
+- [ ] d1-client, d2-client, d3-client creados con Client authentication ON
+- [ ] Valid redirect URIs configuradas por cliente
+- [ ] Valid post logout redirect URIs configuradas (todas apuntan a `http://localhost:8001/*`)
+- [ ] Mapper `preferred-username` (User Property) en cada dedicated scope
+- [ ] Mapper `app-roles` (User Attribute) en cada dedicated scope
+
+### Checklist de configuración Django
+
+- [ ] `extra_hosts: localhost:host-gateway` en docker-compose para D1, D2 y D3
+- [ ] Todas las URLs OIDC apuntan a `http://localhost:8080`
+- [ ] `OIDC_OP_ISSUER = http://localhost:8080/realms/django-realm`
+- [ ] `OIDC_STORE_ID_TOKEN = True`
+- [ ] `CustomOIDCBackend` en `portal/auth_backend.py` de D1, D2 y D3
+- [ ] `KeycloakLogoutView` en `portal/views.py` de D1, D2 y D3
+- [ ] URL `/oidc/logout/` registrada antes de `include('mozilla_django_oidc.urls')` en urls.py

@@ -10,6 +10,9 @@
     {% endfor %}
   </ul>
   <hr>
-  <a href="/oidc/logout/">Cerrar sesión</a>
+  <form method="post" action="/oidc/logout/">
+    {% csrf_token %}
+    <button type="submit">Cerrar sesión</button>
+  </form>
 </body>
 </html>
