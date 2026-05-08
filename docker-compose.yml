@@ -47,6 +47,8 @@ services:
   d1:
     build: ./d1
     container_name: sso-d1
+    extra_hosts:
+      - "localhost:host-gateway"
     environment:
       DB_NAME: d1_db
       DB_USER: ${MYSQL_USER}
@@ -70,6 +72,8 @@ services:
   d2:
     build: ./d2
     container_name: sso-d2
+    extra_hosts:
+      - "localhost:host-gateway"
     environment:
       DB_NAME: d2_db
       DB_USER: ${MYSQL_USER}
@@ -92,6 +96,8 @@ services:
   d3:
     build: ./d3
     container_name: sso-d3
+    extra_hosts:
+      - "localhost:host-gateway"
     environment:
       DB_NAME: d3_db
       DB_USER: ${MYSQL_USER}

@@ -11,7 +11,8 @@ import org.keycloak.storage.StorageId;
 import org.keycloak.storage.adapter.AbstractUserAdapter;
 import org.keycloak.models.UserModel.RequiredAction;
 
-
+import java.util.HashMap;
+import java.util.Map;
 import java.util.List;
 import java.util.stream.Stream;
 
@@ -25,6 +26,17 @@ public class D1UserAdapter extends AbstractUserAdapter {
         super(session, realm, model);
         this.data = data;
         this.componentModel = model;
+    }
+
+    @Override
+    public Map<String, List<String>> getAttributes() {
+        Map<String, List<String>> attrs = new HashMap<>();
+        List<String> roles = data.getAppRoles();
+        System.out.println("DEBUG getAttributes() - appRoles: " + roles);
+        if (roles != null && !roles.isEmpty()) {
+            attrs.put("app_roles", roles);
+        }
+        return attrs;
     }
 
     @Override

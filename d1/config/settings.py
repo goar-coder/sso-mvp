@@ -1,6 +1,11 @@
 from decouple import config
 from pathlib import Path
 
+import logging
+logging.getLogger('mozilla_django_oidc').setLevel(logging.DEBUG)
+
+OIDC_VERIFY_JWT = False  # temporal para debug
+
 BASE_DIR = Path(__file__).resolve().parent.parent
 SECRET_KEY = config('DJANGO_SECRET_KEY', default='dev-secret-key-d1')
 DEBUG = True
@@ -74,8 +79,34 @@ DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 # OIDCBackend segundo  → el resto de la app usa Keycloak
 AUTHENTICATION_BACKENDS = [
     'django.contrib.auth.backends.ModelBackend',
-    'mozilla_django_oidc.auth.OIDCAuthenticationBackend',
+    # 'mozilla_django_oidc.auth.OIDCAuthenticationBackend',
+    'portal.auth_backend.CustomOIDCBackend', 
 ]
+
+
+LOGGING = {
+    'version': 1,
+    'disable_existing_loggers': False,
+    'handlers': {
+        'console': {'class': 'logging.StreamHandler'},
+    },
+    'root': {
+        'handlers': ['console'],
+        'level': 'ERROR',
+    },
+    'loggers': {
+        'portal': {
+            'handlers': ['console'],
+            'level': 'ERROR',
+            'propagate': True,
+        },
+        'mozilla_django_oidc': {
+            'handlers': ['console'],
+            'level': 'DEBUG',
+            'propagate': True,
+        },
+    },
+}
 
 # ── OIDC ──────────────────────────────────────────────────────────────
 KC_BASE = config('KEYCLOAK_URL', default='http://keycloak:8080')
@@ -87,11 +118,20 @@ OIDC_RP_CLIENT_ID     = config('OIDC_RP_CLIENT_ID')
 OIDC_RP_CLIENT_SECRET = config('OIDC_RP_CLIENT_SECRET')
 OIDC_RP_SIGN_ALGO     = 'RS256'
 
-OIDC_OP_JWKS_ENDPOINT          = f'{KC_REALM}/certs'
-OIDC_OP_AUTHORIZATION_ENDPOINT = f'{KC_PUBLIC_REALM}/auth'  # navegador → localhost
-OIDC_OP_TOKEN_ENDPOINT         = f'{KC_REALM}/token'        # server → keycloak
-OIDC_OP_USER_ENDPOINT          = f'{KC_REALM}/userinfo'     # server → keycloak
-OIDC_OP_LOGOUT_ENDPOINT        = f'{KC_PUBLIC_REALM}/logout'
+# OIDC_OP_JWKS_ENDPOINT          = f'{KC_REALM}/certs'
+# OIDC_OP_AUTHORIZATION_ENDPOINT = f'{KC_PUBLIC_REALM}/auth'  # navegador → localhost
+# OIDC_OP_TOKEN_ENDPOINT         = f'{KC_REALM}/token'        # server → keycloak
+# OIDC_OP_USER_ENDPOINT          = f'{KC_REALM}/userinfo'     # server → keycloak
+# OIDC_OP_LOGOUT_ENDPOINT        = f'{KC_PUBLIC_REALM}/logout'
+
+OIDC_OP_JWKS_ENDPOINT          = 'http://localhost:8080/realms/django-realm/protocol/openid-connect/certs'
+OIDC_OP_AUTHORIZATION_ENDPOINT = 'http://localhost:8080/realms/django-realm/protocol/openid-connect/auth'
+OIDC_OP_TOKEN_ENDPOINT         = 'http://localhost:8080/realms/django-realm/protocol/openid-connect/token'
+OIDC_OP_USER_ENDPOINT          = 'http://localhost:8080/realms/django-realm/protocol/openid-connect/userinfo'
+OIDC_OP_LOGOUT_ENDPOINT        = 'http://localhost:8080/realms/django-realm/protocol/openid-connect/logout'
+
+# OIDC_OP_ISSUER = "http://keycloak:8080/realms/django-realm"
+OIDC_OP_ISSUER = "http://localhost:8080/realms/django-realm"
 
 LOGIN_URL           = '/oidc/authenticate/'
 LOGIN_REDIRECT_URL  = '/post-login/'
