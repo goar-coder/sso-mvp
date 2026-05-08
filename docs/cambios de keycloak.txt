@@ -60,7 +60,7 @@ Add to userinfo:    ON
 Clients → d1-client → Client scopes → d1-client-dedicated → Add mapper → Configure a new mapper (by configuration) → User Property
 Name:               preferred-username
 Property:           username
-Token Claim Name:   preferred_username
+Token Claim Name:   preferred_username  (ojo es under score no guion)
 Claim JSON Type:    String
 Add to ID token:    ON
 Add to access token: ON
