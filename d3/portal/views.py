@@ -22,9 +22,13 @@ class KeycloakLogoutView(OIDCLogoutView):
 
 @login_required
 def home(request):
+    grupos = ", ".join(
+        request.user.groups.values_list("name", flat=True)
+    )
     return HttpResponse(f"""
         <h1>D3 — App 3</h1>
         <p>Usuario: {request.user.username}</p>
+        <p>Grupos: {grupos or 'Sin grupos'}</p>
         <form method="post" action="/oidc/logout/">
             <input type="hidden" name="csrfmiddlewaretoken" value="{request.META.get('CSRF_COOKIE', '')}">
             <button type="submit">Cerrar sesión</button>

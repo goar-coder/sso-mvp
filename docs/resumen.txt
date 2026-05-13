@@ -467,64 +467,8 @@ Todos los servicios comparten la red `sso-network` (bridge). Los contenedores se
 
 ---
 
-## 12. Problemas resueltos durante el desarrollo
 
-### 1. getUserById usaba el PK de Django como externalId
-**Problema:** `StorageId.keycloakId()` guardaba el PK numérico de Django como externalId. Al recuperar el usuario por ID, `StorageId.externalId()` devolvía el PK en lugar del username, y `getUserByUsername()` fallaba.
-
-**Solución:** Cambiar `D1UserAdapter.getId()` para usar `data.getUsername()` como externalId en lugar de `data.getId()`.
-
-### 2. UnsupportedOperationException en credentialManager
-**Problema:** Keycloak intentaba evaluar si el usuario tenía OTP configurado, llamando a `credentialManager()` que lanzaba `UnsupportedOperationException`.
-
-**Solución:** Implementar `credentialManager()` con `new UserCredentialManager(session, realm, this)`.
-
-### 3. ReadOnlyException al intentar escribir atributos
-**Problema:** Keycloak intentaba guardar la required action `UPDATE_PROFILE` y otros atributos en el usuario externo.
-
-**Solución:** Sobrescribir todos los métodos de escritura (`setAttribute`, `setSingleAttribute`, `removeAttribute`, `setEmailVerified`, `setEnabled`, `addRequiredAction`, `removeRequiredAction`) con implementaciones vacías. Además `getRequiredActionsStream()` devuelve `Stream.empty()`.
-
-### 4. Pantalla pidiendo email, firstname y lastname
-**Problema:** Keycloak mostraba una pantalla pidiendo completar el perfil porque los campos eran obligatorios y los usuarios externos no los tenían.
-
-**Solución:** En `Realm Settings` → `User profile` poner `Required field: OFF` para `email`, `firstName` y `lastName`. Desactivar `Verify Profile` en el flujo de autenticación.
-
-### 5. 401 Unauthorized en /userinfo
-**Problema:** Django llamaba a `http://keycloak:8080/userinfo` pero el token tenía `issuer=http://localhost:8080`. Keycloak rechazaba el token por issuer inconsistente.
-
-**Solución:** Configurar `Frontend URL = http://localhost:8080` en Keycloak y usar `extra_hosts: localhost:host-gateway` en Docker para que todos los contenedores Django usen `localhost:8080` tanto para las llamadas del navegador como para las llamadas server-side.
-
-### 6. Claims verification failed
-**Problema:** `mozilla_django_oidc` requiere el claim `email` por defecto para verificar al usuario. Los usuarios externos no tienen email en el token.
-
-**Solución:** Sobrescribir `verify_claims()` en `CustomOIDCBackend` para solo requerir `sub` y `preferred_username`.
-
-### 7. app_roles no llegaba en el token
-**Problema:** El mapper `User Realm Role` no funcionaba porque los usuarios externos no tienen roles persistidos en Keycloak.
-
-**Solución en dos partes:**
-- Añadir `getAttributes()` en `D1UserAdapter` para exponer `app_roles` como atributo
-- Activar `Add to ID token: ON` en el mapper `realm roles` del scope `roles`
-- Leer los roles de `realm_access.roles` en `CustomOIDCBackend.get_or_create_user()`
-
-### 8. preferred_username desaparecía del token
-**Problema:** El scope `profile` no siempre incluía `preferred_username` para usuarios externos.
-
-**Solución:** Añadir un mapper explícito `User Property` en cada `*-client-dedicated` scope con `Token Claim Name: preferred_username` (con guión bajo, no guión).
-
-### 9. Logout no cerraba la sesión en Keycloak
-**Problema:** `mozilla_django_oidc` cerraba la sesión local de Django pero no la sesión SSO de Keycloak. Al volver a la app, el usuario se autenticaba automáticamente sin pedir credenciales.
-
-**Solución:** Sobrescribir `OIDCLogoutView` con `KeycloakLogoutView` que redirige al endpoint de logout de Keycloak con `post_logout_redirect_uri`, `client_id` e `id_token_hint`.
-
-### 10. Logout de D2/D3 volvía a D2/D3 en lugar de al portal
-**Problema:** Después del logout de D2, Keycloak redirigía a `http://localhost:8002/` y D2 volvía a autenticar al usuario automáticamente sin pasar por el portal de selección de D1.
-
-**Solución:** Cambiar `post_logout_redirect_uri` en D2 y D3 a `http://localhost:8001/oidc/authenticate/` y añadir `http://localhost:8001/*` en los `Valid post logout redirect URIs` de d2-client y d3-client.
-
----
-
-## 13. Resumen de configuraciones
+## 12. Resumen de configuraciones
 
 ### Variables de entorno por servicio
 
